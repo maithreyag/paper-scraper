@@ -6,6 +6,7 @@ from playwright.sync_api import sync_playwright
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
+from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv()
 
@@ -16,13 +17,14 @@ class TitlesRecipe(BaseModel):
     titles: list[str]
 
 # Takes in url and outputs list of paper titles on that page
-def process_page(url):
+def get_titles_from_page(url):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
         page.goto(url, wait_until="networkidle")
         scraped_text = page.inner_text("body")
         browser.close()
+
     response = client.models.generate_content(
         model='gemini-2.5-flash-lite',
         contents=[prompt, scraped_text],
@@ -38,17 +40,22 @@ def process_page(url):
 
     return titles
 
-# Test: 
-# rail_titles = process_page("https://rail.eecs.berkeley.edu/publications.html")
-# print(rail_titles)
-
 email = os.getenv("EMAIL")
 pyalex.config.email = email
 
-# Returns paper metadata by title, may fail if incomplete word in title
-def search_paper_by_title(title):
-    response = Works().search_filter(title=title).get()
-    if response:
-        print(len(response))
-    else:
-        print("No results found.")
+def get_paper_by_title(title):
+    response = Works().autocomplete(title)
+    return response[0] if response else None
+
+def process_page(url):
+    titles = get_titles_from_page(url)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = [res for res in executor.map(get_paper_by_title, titles) if res]
+
+    store_metadata(results)
+    
+    return
+
+def store_metadata(data_list):
+    pass
