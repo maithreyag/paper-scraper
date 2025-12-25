@@ -53,9 +53,19 @@ def process_page(url):
     with ThreadPoolExecutor(max_workers=10) as executor:
         results = [res for res in executor.map(get_paper_by_title, titles) if res]
 
-    store_metadata(results)
-    
-    return
+    works = []
+    step = 50
 
-def store_metadata(data_list):
+    for i in range(0, len(results), step):
+        ids = [res["id"] for res in results[i:i+50]]
+
+        id_filter = "|".join(ids)
+        
+        works.extend(Works().filter(openalex=id_filter).get(per_page=50))
+
+    store_metadata(works)
+    
+    return len(works)
+
+def store_metadata(data):
     pass
