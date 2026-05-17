@@ -32,7 +32,7 @@ def get_titles_from_page(url):
 
     print(f"Sending {len(scraped_text)} chars to Gemini...")
     response = client.models.generate_content(
-        model='gemini-2.5-flash-lite',
+        model='gemini-2.5-flash',
         contents=[prompt, scraped_text],
         config=types.GenerateContentConfig(
             response_mime_type='application/json',
@@ -49,7 +49,10 @@ def get_titles_from_page(url):
 
 def get_paper_by_title(title):
     response = Works().autocomplete(title)
-    return response[0] if response else None
+    if not response:
+        response = Works().autocomplete(title[:int(len(title) * 0.6)])
+    return Works()[response[0].get("id")] if response else None
+
 
 def process_page(url):
     titles = get_titles_from_page(url)
@@ -57,7 +60,9 @@ def process_page(url):
     with ThreadPoolExecutor(max_workers=10) as executor:
         results = [res for res in executor.map(get_paper_by_title, titles) if res]
 
-    works = []
+    works = results
+
+    """
     step = 50
 
     for i in range(0, len(results), step):
@@ -66,6 +71,7 @@ def process_page(url):
         id_filter = "|".join(ids)
         
         works.extend(Works().filter(openalex=id_filter).get(per_page=50))
+    """
     
     print(f"Retrieved {len(works)} works from OpenAlex")
 
@@ -98,7 +104,7 @@ def store_metadata(data, conn):
     if authorships:
         primary_author = authorships[0].get("author").get("display_name")
 
-    to_write = (title, primary_author, abstract, oa_id, link, date)
+    to_write = (oa_id, title, primary_author, abstract, link, date)
 
     # send to postgres DB
     with conn:
@@ -118,5 +124,5 @@ def store_metadata(data, conn):
     
     return
 
-# Test:
-# process_page("https://rail.eecs.berkeley.edu/publications.html")
+# test_url = "https://rail.eecs.berkeley.edu/publications.html"
+# process_page(test_url)
